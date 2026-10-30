@@ -1,0 +1,342 @@
+-- =====================================================================
+--  TEST ONLY  -  DO NOT RUN THIS ON YOUR REAL PROJECT DATABASE
+-- =====================================================================
+--  This script RE-CREATES the Mess Management System schema (tables,
+--  sample data, sequence, procedures, functions and triggers) from the
+--  project documentation PDF. It was used to build and test the web
+--  application on a throw-away Oracle database.
+--
+--  It DROPS the tables first. Running it on your real database would
+--  DELETE YOUR DATA. Your real database already has all of these
+--  objects - the application only needs database/01_app_users.sql.
+--
+--  Where the PDF said "type not confirmed" (some STUDENT columns and
+--  MENU), reasonable types were chosen and are marked ASSUMED below.
+--  Sample rows follow the patterns described in the PDF; rows the PDF
+--  did not preserve exactly were filled with plausible values.
+-- =====================================================================
+
+SET DEFINE OFF
+SET SERVEROUTPUT ON
+
+-- ---------- clean up (test database only) ----------
+BEGIN
+  FOR t IN (SELECT table_name FROM user_tables
+            WHERE table_name IN ('APP_USERS','PAYMENT_AUDIT','WASTAGE','COMPLAINT','PAYMENT',
+                                 'ATTENDANCE','MENU_ITEM','FOOD_ITEM','MENU','STUDENT')) LOOP
+    EXECUTE IMMEDIATE 'DROP TABLE ' || t.table_name || ' CASCADE CONSTRAINTS PURGE';
+  END LOOP;
+  FOR s IN (SELECT sequence_name FROM user_sequences WHERE sequence_name = 'PAYMENT_AUDIT_SEQ') LOOP
+    EXECUTE IMMEDIATE 'DROP SEQUENCE ' || s.sequence_name;
+  END LOOP;
+END;
+/
+
+-- ---------- 1. STUDENT (GENDER/HOSTEL_NAME/EMAIL/STATUS types ASSUMED) ----------
+CREATE TABLE STUDENT (
+  STUDENT_ID   NUMBER PRIMARY KEY,
+  STUDENT_NAME VARCHAR2(50) NOT NULL,
+  ROOM_NO      VARCHAR2(10),
+  PHONE        VARCHAR2(15),
+  GENDER       VARCHAR2(10),
+  HOSTEL_NAME  VARCHAR2(50),
+  EMAIL        VARCHAR2(100),
+  STATUS       VARCHAR2(15) DEFAULT 'Active'
+);
+
+-- ---------- 2. MENU (ASSUMED: only MENU_ID and MENU_DATE) ----------
+CREATE TABLE MENU (
+  MENU_ID   NUMBER PRIMARY KEY,
+  MENU_DATE DATE NOT NULL
+);
+
+-- ---------- 3. FOOD_ITEM ----------
+CREATE TABLE FOOD_ITEM (
+  FOOD_ID      NUMBER PRIMARY KEY,
+  FOOD_NAME    VARCHAR2(50) NOT NULL,
+  CATEGORY     VARCHAR2(20) NOT NULL,
+  CALORIES     NUMBER,
+  AVAILABILITY VARCHAR2(15)
+);
+
+-- ---------- 4. MENU_ITEM ----------
+CREATE TABLE MENU_ITEM (
+  MENU_ITEM_ID     NUMBER PRIMARY KEY,
+  MENU_ID          NUMBER NOT NULL,
+  FOOD_ID          NUMBER NOT NULL,
+  MEAL_TYPE        VARCHAR2(15) NOT NULL,
+  QUANTITY_PLANNED NUMBER(8,2),
+  CONSTRAINT FK_MI_MENU FOREIGN KEY (MENU_ID) REFERENCES MENU(MENU_ID),
+  CONSTRAINT FK_MI_FOOD FOREIGN KEY (FOOD_ID) REFERENCES FOOD_ITEM(FOOD_ID)
+);
+
+-- ---------- 5. ATTENDANCE ----------
+CREATE TABLE ATTENDANCE (
+  ATTENDANCE_ID   NUMBER PRIMARY KEY,
+  STUDENT_ID      NUMBER NOT NULL,
+  MENU_ID         NUMBER NOT NULL,
+  MEAL_TYPE       VARCHAR2(15) NOT NULL,
+  ATTENDANCE_TIME TIMESTAMP(6),
+  STATUS          VARCHAR2(15),
+  CONSTRAINT FK_ATT_STUDENT FOREIGN KEY (STUDENT_ID) REFERENCES STUDENT(STUDENT_ID),
+  CONSTRAINT FK_ATT_MENU    FOREIGN KEY (MENU_ID)    REFERENCES MENU(MENU_ID)
+);
+
+-- ---------- 6. PAYMENT (verbatim from PDF 5.1) ----------
+CREATE TABLE PAYMENT (
+  PAYMENT_ID NUMBER PRIMARY KEY,
+  STUDENT_ID NUMBER NOT NULL,
+  PAYMENT_MONTH VARCHAR2(20) NOT NULL,
+  PAYMENT_DATE DATE DEFAULT SYSDATE,
+  AMOUNT NUMBER(10,2) NOT NULL CHECK (AMOUNT > 0),
+  PAYMENT_STATUS VARCHAR2(15) DEFAULT 'Pending'
+    CHECK (PAYMENT_STATUS IN ('Paid','Pending','Failed')),
+  CONSTRAINT FK_PAY_STUDENT
+    FOREIGN KEY (STUDENT_ID) REFERENCES STUDENT(STUDENT_ID),
+  CONSTRAINT UQ_STUDENT_MONTH
+    UNIQUE (STUDENT_ID, PAYMENT_MONTH)
+);
+
+-- ---------- 7. COMPLAINT (verbatim from PDF 5.2) ----------
+CREATE TABLE COMPLAINT (
+  COMPLAINT_ID NUMBER PRIMARY KEY,
+  STUDENT_ID NUMBER NOT NULL,
+  MENU_ID NUMBER,
+  COMPLAINT_DATE DATE DEFAULT SYSDATE,
+  COMPLAINT_TYPE VARCHAR2(30) NOT NULL,
+  DESCRIPTION VARCHAR2(200) NOT NULL,
+  SEVERITY VARCHAR2(10) DEFAULT 'Medium'
+    CHECK (SEVERITY IN ('Low','Medium','High')),
+  STATUS VARCHAR2(15) DEFAULT 'Open'
+    CHECK (STATUS IN ('Open','In Progress','Resolved')),
+  CONSTRAINT FK_COMP_STUDENT
+    FOREIGN KEY (STUDENT_ID) REFERENCES STUDENT(STUDENT_ID),
+  CONSTRAINT FK_COMP_MENU
+    FOREIGN KEY (MENU_ID) REFERENCES MENU(MENU_ID)
+);
+
+-- ---------- 8. WASTAGE (verbatim from PDF 5.3) ----------
+CREATE TABLE WASTAGE (
+  WASTAGE_ID NUMBER PRIMARY KEY,
+  MENU_ITEM_ID NUMBER NOT NULL,
+  WASTAGE_DATE DATE DEFAULT SYSDATE,
+  QUANTITY_WASTED NUMBER(8,2) NOT NULL CHECK (QUANTITY_WASTED >= 0),
+  REASON VARCHAR2(200),
+  CONSTRAINT FK_WASTE_MENU_ITEM
+    FOREIGN KEY (MENU_ITEM_ID) REFERENCES MENU_ITEM(MENU_ITEM_ID)
+);
+
+-- ---------- sample data ----------
+INSERT INTO STUDENT VALUES (101,'Aarav Sharma','A-101','9876500101','Male','Mens Hostel A','aarav.sharma@college.edu','Active');
+INSERT INTO STUDENT VALUES (102,'Priya Singh','B-201','9876500102','Female','Womens Hostel B','priya.singh@college.edu','Active');
+INSERT INTO STUDENT VALUES (103,'Rohan Gupta','A-102','9876500103','Male','Mens Hostel A','rohan.gupta@college.edu','Active');
+INSERT INTO STUDENT VALUES (104,'Ananya Verma','B-202','9876500104','Female','Womens Hostel B','ananya.verma@college.edu','Active');
+INSERT INTO STUDENT VALUES (105,'Kabir Mehta','A-103','9876500105','Male','Mens Hostel A','kabir.mehta@college.edu','Active');
+INSERT INTO STUDENT VALUES (106,'Sneha Patel','B-203','9876500106','Female','Womens Hostel B','sneha.patel@college.edu','Active');
+INSERT INTO STUDENT VALUES (107,'Ishaan Rao','A-104','9876500107','Male','Mens Hostel A','ishaan.rao@college.edu','Active');
+INSERT INTO STUDENT VALUES (108,'Meera Nair','B-204','9876500108','Female','Womens Hostel B','meera.nair@college.edu','Active');
+INSERT INTO STUDENT VALUES (109,'Arjun Das','A-105','9876500109','Male','Mens Hostel A','arjun.das@college.edu','Active');
+INSERT INTO STUDENT VALUES (110,'Diya Kapoor','B-205','9876500110','Female','Womens Hostel B','diya.kapoor@college.edu','Active');
+
+BEGIN
+  FOR i IN 1..10 LOOP
+    INSERT INTO MENU (MENU_ID, MENU_DATE) VALUES (i, DATE '2026-10-01' + (i - 1));
+  END LOOP;
+END;
+/
+
+INSERT INTO FOOD_ITEM VALUES (1,'Idli','Breakfast',150,'Available');
+INSERT INTO FOOD_ITEM VALUES (2,'Dosa','Breakfast',220,'Available');
+INSERT INTO FOOD_ITEM VALUES (3,'Poha','Breakfast',180,'Available');
+INSERT INTO FOOD_ITEM VALUES (4,'Paneer Curry','Lunch',300,'Available');
+INSERT INTO FOOD_ITEM VALUES (5,'Chapati','Lunch',120,'Available');
+INSERT INTO FOOD_ITEM VALUES (6,'Rice','Lunch',200,'Available');
+INSERT INTO FOOD_ITEM VALUES (7,'Dal','Lunch',160,'Available');
+INSERT INTO FOOD_ITEM VALUES (8,'Chicken Curry','Dinner',350,'Available');
+INSERT INTO FOOD_ITEM VALUES (9,'Upma','Breakfast',190,'Available');
+INSERT INTO FOOD_ITEM VALUES (10,'Fruit Salad','Snack',130,'Available');
+
+INSERT INTO MENU_ITEM VALUES (1,1,1,'Breakfast',80);
+INSERT INTO MENU_ITEM VALUES (2,1,4,'Lunch',60);
+INSERT INTO MENU_ITEM VALUES (3,2,2,'Breakfast',75);
+INSERT INTO MENU_ITEM VALUES (4,2,5,'Lunch',100);
+INSERT INTO MENU_ITEM VALUES (5,3,3,'Breakfast',70);
+INSERT INTO MENU_ITEM VALUES (6,3,6,'Lunch',90);
+INSERT INTO MENU_ITEM VALUES (7,4,7,'Lunch',85);
+INSERT INTO MENU_ITEM VALUES (8,4,8,'Dinner',65);
+INSERT INTO MENU_ITEM VALUES (9,5,9,'Breakfast',50);
+INSERT INTO MENU_ITEM VALUES (10,5,10,'Snack',55);
+
+INSERT INTO ATTENDANCE VALUES (1,101,1,'Breakfast',TIMESTAMP '2026-10-01 08:05:00','Present');
+INSERT INTO ATTENDANCE VALUES (2,102,1,'Lunch',TIMESTAMP '2026-10-01 13:10:00','Present');
+INSERT INTO ATTENDANCE VALUES (3,103,2,'Breakfast',TIMESTAMP '2026-10-02 08:20:00','Absent');
+INSERT INTO ATTENDANCE VALUES (4,104,2,'Lunch',TIMESTAMP '2026-10-02 13:00:00','Present');
+INSERT INTO ATTENDANCE VALUES (5,105,3,'Breakfast',TIMESTAMP '2026-10-03 08:15:00','Present');
+INSERT INTO ATTENDANCE VALUES (6,106,3,'Lunch',TIMESTAMP '2026-10-03 13:25:00','Absent');
+INSERT INTO ATTENDANCE VALUES (7,107,4,'Lunch',TIMESTAMP '2026-10-04 12:55:00','Present');
+INSERT INTO ATTENDANCE VALUES (8,108,4,'Dinner',TIMESTAMP '2026-10-04 20:10:00','Present');
+INSERT INTO ATTENDANCE VALUES (9,109,5,'Breakfast',TIMESTAMP '2026-10-05 08:30:00','Absent');
+INSERT INTO ATTENDANCE VALUES (10,110,5,'Snack',TIMESTAMP '2026-10-05 17:05:00','Present');
+
+INSERT INTO PAYMENT VALUES (1,101,'October 2026',DATE '2026-10-01',3000,'Paid');
+INSERT INTO PAYMENT VALUES (2,102,'October 2026',DATE '2026-10-01',3000,'Paid');
+INSERT INTO PAYMENT VALUES (3,103,'October 2026',DATE '2026-10-02',3200,'Pending');
+INSERT INTO PAYMENT VALUES (4,104,'October 2026',DATE '2026-10-02',3000,'Paid');
+INSERT INTO PAYMENT VALUES (5,105,'October 2026',DATE '2026-10-03',3100,'Paid');
+INSERT INTO PAYMENT VALUES (6,106,'October 2026',DATE '2026-10-03',3200,'Pending');
+INSERT INTO PAYMENT VALUES (7,107,'October 2026',DATE '2026-10-04',3000,'Paid');
+INSERT INTO PAYMENT VALUES (8,108,'October 2026',DATE '2026-10-04',3100,'Paid');
+INSERT INTO PAYMENT VALUES (9,109,'October 2026',DATE '2026-10-05',3200,'Pending');
+INSERT INTO PAYMENT VALUES (10,110,'October 2026',DATE '2026-10-05',3000,'Paid');
+
+INSERT INTO COMPLAINT VALUES (1,101,1,DATE '2026-10-01','Food Quality','Idli was cold and hard','Medium','Resolved');
+INSERT INTO COMPLAINT VALUES (2,102,1,DATE '2026-10-01','Cleanliness','Dining tables not cleaned before lunch','High','Open');
+INSERT INTO COMPLAINT VALUES (3,103,2,DATE '2026-10-02','Service','Breakfast counter opened 20 minutes late','Low','In Progress');
+INSERT INTO COMPLAINT VALUES (4,104,2,DATE '2026-10-02','Food Quality','Chapati was undercooked','Medium','Open');
+INSERT INTO COMPLAINT VALUES (5,105,3,DATE '2026-10-03','Service','Rice ran out before 1:30 PM','High','Resolved');
+INSERT INTO COMPLAINT VALUES (6,106,3,DATE '2026-10-03','Cleanliness','Water dispenser area was dirty','Medium','In Progress');
+INSERT INTO COMPLAINT VALUES (7,107,4,DATE '2026-10-04','Food Quality','Dal was too salty','Low','Open');
+INSERT INTO COMPLAINT VALUES (8,108,4,DATE '2026-10-04','Service','Staff were rude during dinner','High','Open');
+INSERT INTO COMPLAINT VALUES (9,109,5,DATE '2026-10-05','Cleanliness','Plates had food stains','Medium','Resolved');
+INSERT INTO COMPLAINT VALUES (10,110,5,DATE '2026-10-05','Food Quality','Fruit salad was not fresh','Low','Open');
+
+INSERT INTO WASTAGE VALUES (1,1,DATE '2026-10-01',3,'Leftover after breakfast');
+INSERT INTO WASTAGE VALUES (2,2,DATE '2026-10-01',5,'Excess preparation');
+INSERT INTO WASTAGE VALUES (3,3,DATE '2026-10-02',2,'Burnt batch');
+INSERT INTO WASTAGE VALUES (4,4,DATE '2026-10-02',4,'Low attendance at lunch');
+INSERT INTO WASTAGE VALUES (5,5,DATE '2026-10-03',1,'Plate leftovers');
+INSERT INTO WASTAGE VALUES (6,6,DATE '2026-10-03',6,'Excess preparation');
+INSERT INTO WASTAGE VALUES (7,7,DATE '2026-10-04',2,'Too salty, returned');
+INSERT INTO WASTAGE VALUES (8,8,DATE '2026-10-04',3,'Plate leftovers');
+INSERT INTO WASTAGE VALUES (9,9,DATE '2026-10-05',2,'Leftover after breakfast');
+INSERT INTO WASTAGE VALUES (10,10,DATE '2026-10-05',4,'Fruits over-ripe');
+COMMIT;
+
+-- ---------- 9. PAYMENT_AUDIT + sequence (verbatim from PDF 5.4 / 9.1) ----------
+CREATE TABLE PAYMENT_AUDIT (
+  AUDIT_ID NUMBER PRIMARY KEY,
+  PAYMENT_ID NUMBER,
+  OLD_STATUS VARCHAR2(15),
+  NEW_STATUS VARCHAR2(15),
+  CHANGE_DATE DATE DEFAULT SYSDATE
+);
+
+CREATE SEQUENCE PAYMENT_AUDIT_SEQ
+START WITH 1
+INCREMENT BY 1;
+
+-- ---------- procedures (verbatim from PDF 6) ----------
+CREATE OR REPLACE PROCEDURE ADD_MESS_PAYMENT (
+  P_PAYMENT_ID IN NUMBER,
+  P_STUDENT_ID IN NUMBER,
+  P_PAYMENT_MONTH IN VARCHAR2,
+  P_AMOUNT IN NUMBER
+)
+AS
+BEGIN
+  INSERT INTO PAYMENT (
+    PAYMENT_ID, STUDENT_ID, PAYMENT_MONTH, AMOUNT, PAYMENT_STATUS
+  )
+  VALUES (
+    P_PAYMENT_ID, P_STUDENT_ID, P_PAYMENT_MONTH, P_AMOUNT, 'Paid'
+  );
+  DBMS_OUTPUT.PUT_LINE('Payment added successfully.');
+END;
+/
+
+CREATE OR REPLACE PROCEDURE RESOLVE_COMPLAINT (
+  P_COMPLAINT_ID IN NUMBER
+)
+AS
+BEGIN
+  UPDATE COMPLAINT
+  SET STATUS = 'Resolved'
+  WHERE COMPLAINT_ID = P_COMPLAINT_ID;
+  IF SQL%ROWCOUNT > 0 THEN
+    DBMS_OUTPUT.PUT_LINE('Complaint resolved successfully.');
+  ELSE
+    DBMS_OUTPUT.PUT_LINE('Complaint ID not found.');
+  END IF;
+END;
+/
+
+-- ---------- functions (verbatim from PDF 7) ----------
+CREATE OR REPLACE FUNCTION TOTAL_PAID (
+  P_STUDENT_ID IN NUMBER
+)
+RETURN NUMBER
+AS
+  V_TOTAL NUMBER;
+BEGIN
+  SELECT NVL(SUM(AMOUNT), 0)
+  INTO V_TOTAL
+  FROM PAYMENT
+  WHERE STUDENT_ID = P_STUDENT_ID
+  AND PAYMENT_STATUS = 'Paid';
+  RETURN V_TOTAL;
+END;
+/
+
+CREATE OR REPLACE FUNCTION MEALS_ATTENDED (
+  P_STUDENT_ID IN NUMBER
+)
+RETURN NUMBER
+AS
+  V_COUNT NUMBER;
+BEGIN
+  SELECT COUNT(*)
+  INTO V_COUNT
+  FROM ATTENDANCE
+  WHERE STUDENT_ID = P_STUDENT_ID
+  AND STATUS = 'Present';
+  RETURN V_COUNT;
+END;
+/
+
+-- ---------- triggers (verbatim from PDF 9) ----------
+CREATE OR REPLACE TRIGGER PAYMENT_STATUS_AUDIT_TRG
+AFTER UPDATE OF PAYMENT_STATUS ON PAYMENT
+FOR EACH ROW
+BEGIN
+  INSERT INTO PAYMENT_AUDIT (
+    AUDIT_ID, PAYMENT_ID, OLD_STATUS, NEW_STATUS, CHANGE_DATE
+  )
+  VALUES (
+    PAYMENT_AUDIT_SEQ.NEXTVAL,
+    :OLD.PAYMENT_ID,
+    :OLD.PAYMENT_STATUS,
+    :NEW.PAYMENT_STATUS,
+    SYSDATE
+  );
+END;
+/
+
+CREATE OR REPLACE TRIGGER CHECK_FOOD_WASTAGE
+BEFORE INSERT OR UPDATE OF QUANTITY_WASTED, MENU_ITEM_ID
+ON WASTAGE
+FOR EACH ROW
+DECLARE
+  V_PLANNED_QTY NUMBER;
+BEGIN
+  SELECT QUANTITY_PLANNED
+  INTO V_PLANNED_QTY
+  FROM MENU_ITEM
+  WHERE MENU_ITEM_ID = :NEW.MENU_ITEM_ID;
+  IF :NEW.QUANTITY_WASTED > V_PLANNED_QTY THEN
+    RAISE_APPLICATION_ERROR(
+      -20001,
+      'Wastage cannot exceed planned quantity.'
+    );
+  END IF;
+END;
+/
+
+-- ---------- reproduce the trigger test described in PDF 4.9 ----------
+UPDATE PAYMENT SET PAYMENT_STATUS = 'Pending' WHERE PAYMENT_ID = 1;
+COMMIT;
+UPDATE PAYMENT SET PAYMENT_STATUS = 'Paid' WHERE PAYMENT_ID = 1;
+COMMIT;
+
+SELECT object_name, object_type, status FROM user_objects
+WHERE object_type IN ('TABLE','SEQUENCE','PROCEDURE','FUNCTION','TRIGGER')
+ORDER BY object_type, object_name;

@@ -1,0 +1,10 @@
+fastapi==0.162.0
+uvicorn==0.54.0
+oracledb==26.0.1
+python-dotenv==1.2.4
+pydantic==2.14.1
+bcrypt==5.0.0
+PyJWT==2.15.1
+python-multipart==0.0.32
+requests==2.34.2
+watchfiles
